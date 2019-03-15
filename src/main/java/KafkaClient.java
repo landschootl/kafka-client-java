@@ -48,7 +48,40 @@ public class KafkaClient {
         producer = new KafkaProducer(props);
     }
 
+    public void consume() {
+        consumer.subscribe(Arrays.asList(topic));
+        while (true) {
+            ConsumerRecords<String, String> records = consumer.poll(1000);
+            for (ConsumerRecord<String, String> record : records) {
+                System.out.printf("%s [%d] offset=%d, key=%s, value=\"%s\"\n",
+								  record.topic(), record.partition(),
+								  record.offset(), record.key(), record.value());
+			}
+        }
+    }
+
+    public void produce() {
+        Thread one = new Thread() {
+            public void run() {
+                try {
+                    int i = 0;
+                    while(true) {
+                        Date d = new Date();
+                        producer.send(new ProducerRecord(topic, Integer.toString(i), d.toString()));
+                        Thread.sleep(1000);
+                        i++;
+                    }
+                } catch (InterruptedException v) {
+                    System.out.println(v);
+                }
+            }
+        };
+        one.start();
+    }
+
     public static void main(String[] args) {
 		KafkaClient c = new KafkaClient();
+        c.produce();
+        c.consume();
     }
 }
