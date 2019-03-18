@@ -4,6 +4,7 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.security.scram.ScramLoginModule;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 
@@ -25,12 +26,11 @@ public class KafkaClient {
 
     private void client(String brokers, String username, String password){
         topic = username + "-default";
-        String jaasTemplate = "org.apache.kafka.common.security.scram.ScramLoginModule required username=\"%s\" password=\"%s\";";
-        String jaasCfg = String.format(jaasTemplate, username, password);
         String serializer = StringSerializer.class.getName();
         String deserializer = StringDeserializer.class.getName();
         Properties props = new Properties();
         props.put("bootstrap.servers", brokers);
+        props.put("client.id", "your-app");
         props.put("group.id", username + "-consumer");
         props.put("enable.auto.commit", "true");
         props.put("auto.commit.interval.ms", "1000");
@@ -40,12 +40,20 @@ public class KafkaClient {
         props.put("value.deserializer", deserializer);
         props.put("key.serializer", serializer);
         props.put("value.serializer", serializer);
-        props.put("security.protocol", "SASL_SSL");
-        props.put("sasl.mechanism", "SCRAM-SHA-256");
-        props.put("sasl.jaas.config", jaasCfg);
-
+        props.put("security.protocol", "SASL_PLAINTEXT");
+        props.put("sasl.mechanism", "SCRAM-SHA-512");
+        props.put("sasl.jaas.config", credentials(username,password));
         consumer = new KafkaConsumer(props);
         producer = new KafkaProducer(props);
+    }
+
+    private String credentials(String username, String password) {
+        return String.format(
+                "%s required username=\"%s\" password=\"%s\";",
+                ScramLoginModule.class.getName(),
+                username,
+                password
+        );
     }
 
     public void consume() {
@@ -54,8 +62,8 @@ public class KafkaClient {
             ConsumerRecords<String, String> records = consumer.poll(1000);
             for (ConsumerRecord<String, String> record : records) {
                 System.out.printf("%s [%d] offset=%d, key=%s, value=\"%s\"\n",
-								  record.topic(), record.partition(),
-								  record.offset(), record.key(), record.value());
+                  record.topic(), record.partition(),
+                  record.offset(), record.key(), record.value());
 			}
         }
     }
@@ -77,11 +85,5 @@ public class KafkaClient {
             }
         };
         one.start();
-    }
-
-    public static void main(String[] args) {
-		KafkaClient c = new KafkaClient();
-        c.produce();
-        c.consume();
     }
 }
