@@ -1,11 +1,15 @@
-import org.apache.kafka.clients.consumer.ConsumerRecord;
+import io.confluent.kafka.serializers.AbstractKafkaAvroSerDeConfig;
+import io.confluent.kafka.serializers.KafkaAvroDeserializer;
+import io.confluent.kafka.serializers.KafkaAvroDeserializerConfig;
+import org.apache.kafka.clients.CommonClientConfigs;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.consumer.StickyAssignor;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.security.scram.ScramLoginModule;
-import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 
 import java.util.Arrays;
@@ -13,38 +17,53 @@ import java.util.Date;
 import java.util.Properties;
 
 public class KafkaClient {
-    String topic;
-    KafkaConsumer<String, String> consumer;
-    Producer<String, String> producer;
+    private KafkaConsumer<String, String> consumer;
+    private Producer<String, String> producer;
+
+    private String brokers;
+    private String username;
+    private String password;
+    private String clientId;
+    private String groupeId;
+    private String registry;
+    private String topic;
 
     public KafkaClient() {
-        String brokers = System.getenv("KAFKA_BROKERS");
-        String username = System.getenv("KAFKA_USERNAME");
-        String password = System.getenv("KAFKA_PASSWORD");
-        String clientId = System.getenv("KAFKA_ClIENT_ID");
-        String groupeId = System.getenv("KAFKA_GROUP_ID");
-        client(brokers, username, password, clientId, groupeId);
+        brokers = System.getenv("KAFKA_BROKERS");
+        username = System.getenv("KAFKA_USERNAME");
+        password = System.getenv("KAFKA_PASSWORD");
+        clientId = System.getenv("KAFKA_CLIENTID");
+        groupeId = System.getenv("KAFKA_GROUPID");
+        registry = System.getenv("KAFKA_REGISTRY");
+        topic = System.getenv("KAFKA_TOPIC");
+        client();
     }
 
-    private void client(String brokers, String username, String password, String clientId, String groupeId){
-        topic = username + "-default";
-        String serializer = StringSerializer.class.getName();
-        String deserializer = StringDeserializer.class.getName();
+    private void client(){
         Properties props = new Properties();
-        props.put("bootstrap.servers", brokers);
-        props.put("client.id", clientId);
-        props.put("group.id", groupeId);
-        props.put("enable.auto.commit", "true");
-        props.put("auto.commit.interval.ms", "1000");
-        props.put("auto.offset.reset", "earliest");
-        props.put("session.timeout.ms", "30000");
-        props.put("key.deserializer", deserializer);
-        props.put("value.deserializer", deserializer);
-        props.put("key.serializer", serializer);
-        props.put("value.serializer", serializer);
-        props.put("security.protocol", "SASL_PLAINTEXT");
+
+        // Connection parameters
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokers);
+        props.put(ConsumerConfig.CLIENT_ID_CONFIG, clientId);
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, groupeId);
+
+        // How to deserialize Avro messages
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, KafkaAvroDeserializer.class);
+        props.put(AbstractKafkaAvroSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, registry);
+        props.put(AbstractKafkaAvroSerDeConfig.AUTO_REGISTER_SCHEMAS, Boolean.FALSE.toString());
+        props.put(KafkaAvroDeserializerConfig.SPECIFIC_AVRO_READER_CONFIG, Boolean.TRUE.toString());
+
+        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        props.put(ConsumerConfig.FETCH_MIN_BYTES_CONFIG, "1");
+        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, Boolean.FALSE.toString());
+        props.put(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG, StickyAssignor.class.getName());
+
+        // Add security options
+        props.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, "SASL_PLAINTEXT");
         props.put("sasl.mechanism", "SCRAM-SHA-512");
-        props.put("sasl.jaas.config", credentials(username,password));
+        props.put("sasl.jaas.config", credentials(username, password));
+
         consumer = new KafkaConsumer(props);
         producer = new KafkaProducer(props);
     }
@@ -62,11 +81,11 @@ public class KafkaClient {
         consumer.subscribe(Arrays.asList(topic));
         while (true) {
             ConsumerRecords<String, String> records = consumer.poll(1000);
-            for (ConsumerRecord<String, String> record : records) {
+            records.forEach(record -> {
                 System.out.printf("%s [%d] offset=%d, key=%s, value=\"%s\"\n",
                   record.topic(), record.partition(),
                   record.offset(), record.key(), record.value());
-			}
+			});
         }
     }
 
