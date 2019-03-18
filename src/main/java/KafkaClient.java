@@ -21,17 +21,19 @@ public class KafkaClient {
         String brokers = System.getenv("KAFKA_BROKERS");
         String username = System.getenv("KAFKA_USERNAME");
         String password = System.getenv("KAFKA_PASSWORD");
-        client(brokers, username, password);
+        String clientId = System.getenv("KAFKA_ClIENT_ID");
+        String groupeId = System.getenv("KAFKA_GROUP_ID");
+        client(brokers, username, password, clientId, groupeId);
     }
 
-    private void client(String brokers, String username, String password){
+    private void client(String brokers, String username, String password, String clientId, String groupeId){
         topic = username + "-default";
         String serializer = StringSerializer.class.getName();
         String deserializer = StringDeserializer.class.getName();
         Properties props = new Properties();
         props.put("bootstrap.servers", brokers);
-        props.put("client.id", "your-app");
-        props.put("group.id", username + "-consumer");
+        props.put("client.id", clientId);
+        props.put("group.id", groupeId);
         props.put("enable.auto.commit", "true");
         props.put("auto.commit.interval.ms", "1000");
         props.put("auto.offset.reset", "earliest");
